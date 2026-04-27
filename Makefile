@@ -1,9 +1,7 @@
 INSTALL_TARGET_PROCESSES = SpringBoard
 
-# Rootless jailbreak support (iOS 15+/16+ with Dopamine, palera1n rootless, etc.)
-THEOS_PACKAGE_SCHEME = rootless
-TARGET = iphone:clang:16.5:15.0
-ARCHS = arm64 arm64e
+# THEOS_PACKAGE_SCHEME, TARGET, ARCHS được truyền từ command line khi build
+# Ví dụ: make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless ARCHS="arm64 arm64e"
 
 include $(THEOS)/makefiles/common.mk
 

@@ -1,4 +1,4 @@
-name: Build BaoBoiAgent .deb
+name: Build BaoBoiAgent .deb (Rootful + Rootless)
 
 on:
   push:
@@ -15,13 +15,28 @@ jobs:
       - name: Setup Theos
         uses: Randomblock1/theos-action@main
 
-      - name: Build tweak
+      - name: Build rootful .deb (iOS 14+, checkra1n/unc0ver/Taurine)
         run: |
-          rm -f packages/*
-          make package FINALPACKAGE=1
+          rm -rf packages/
+          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootful ARCHS="arm64 arm64e" TARGET="iphone:clang:16.5:14.0"
+          ls packages/
+          for f in packages/*.deb; do
+            mv "$f" "${f%.deb}_rootful.deb"
+          done
           ls packages/
 
-      - name: Upload .deb artifact
+      - name: Build rootless .deb (iOS 15+/16+, Dopamine/palera1n/Serotonin)
+        run: |
+          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless ARCHS="arm64 arm64e" TARGET="iphone:clang:16.5:15.0"
+          ls packages/
+          for f in packages/*.deb; do
+            if [[ "$f" != *_rootful.deb ]] && [[ "$f" != *_rootless.deb ]]; then
+              mv "$f" "${f%.deb}_rootless.deb"
+            fi
+          done
+          ls packages/
+
+      - name: Upload both .deb artifacts
         uses: actions/upload-artifact@v4
         with:
           name: BaoBoiAgent-deb
