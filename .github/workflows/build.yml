@@ -14,30 +14,33 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Theos
-        uses: actions/checkout@v4
-        with:
-          repository: theos/theos
-          path: theos
-          submodules: recursive
-
-      - name: Install dependencies
+      - name: Install system dependencies
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q curl wget git make findutils ldid dpkg-dev clang
+          sudo apt-get install -y -q curl wget git make findutils dpkg-dev clang libssl-dev
+
+      - name: Install ldid
+        run: |
+          # ldid không có trong apt, cài từ binary prebuilt
+          wget -q "https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_linux_x86_64" -O /usr/local/bin/ldid
+          chmod +x /usr/local/bin/ldid
+          ldid -v || true
+
+      - name: Setup Theos
+        run: |
+          git clone --recursive https://github.com/theos/theos.git $GITHUB_WORKSPACE/theos
+          echo "THEOS=$GITHUB_WORKSPACE/theos" >> $GITHUB_ENV
+          echo "THEOS_MAKE_PATH=$GITHUB_WORKSPACE/theos/makefiles" >> $GITHUB_ENV
 
       - name: Download iOS SDK
         run: |
-          mkdir -p theos/sdks
+          mkdir -p $GITHUB_WORKSPACE/theos/sdks
           wget -q "https://github.com/theos/sdks/archive/master.tar.gz" -O sdks.tar.gz
-          tar -xzf sdks.tar.gz --strip-components=1 -C theos/sdks
-          ls theos/sdks/
+          tar -xzf sdks.tar.gz --strip-components=1 -C $GITHUB_WORKSPACE/theos/sdks
+          ls $GITHUB_WORKSPACE/theos/sdks/
 
       - name: Build tweak
         working-directory: tweak
-        env:
-          THEOS: ${{ github.workspace }}/theos
-          THEOS_MAKE_PATH: ${{ github.workspace }}/theos/makefiles
         run: |
           make package FINALPACKAGE=1
           ls packages/
