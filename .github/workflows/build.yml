@@ -2,8 +2,6 @@ name: Build BaoBoiAgent .deb
 
 on:
   push:
-    paths:
-      - 'tweak/**'
   workflow_dispatch:
 
 jobs:
@@ -21,7 +19,6 @@ jobs:
 
       - name: Install ldid
         run: |
-          # ldid không có trong apt, cài từ binary prebuilt
           wget -q "https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_linux_x86_64" -O /usr/local/bin/ldid
           chmod +x /usr/local/bin/ldid
           ldid -v || true
@@ -40,7 +37,6 @@ jobs:
           ls $GITHUB_WORKSPACE/theos/sdks/
 
       - name: Build tweak
-        working-directory: tweak
         run: |
           make package FINALPACKAGE=1
           ls packages/
@@ -49,5 +45,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: BaoBoiAgent-deb
-          path: tweak/packages/*.deb
+          path: packages/*.deb
           retention-days: 30
