@@ -1,0 +1,9 @@
+Package: com.baoboi.agent
+Name: BaoBoiAgent
+Version: 1.2.0
+Architecture: iphoneos-arm64
+Description: Bảo Bối Agent - Giám sát thiết bị iOS
+Maintainer: Bao Boi <support@baoboidash.com>
+Author: Bao Boi <support@baoboidash.com>
+Section: Tweaks
+Depends: mobilesubstrate, firmware (>= 14.0)
