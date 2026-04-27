@@ -12,32 +12,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q curl wget git make findutils dpkg-dev clang libssl-dev
-
-      - name: Install ldid
-        run: |
-          wget -q "https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_linux_x86_64" -O /usr/local/bin/ldid
-          chmod +x /usr/local/bin/ldid
-          ldid -v || true
-
       - name: Setup Theos
-        run: |
-          git clone --recursive https://github.com/theos/theos.git $GITHUB_WORKSPACE/theos
-          echo "THEOS=$GITHUB_WORKSPACE/theos" >> $GITHUB_ENV
-          echo "THEOS_MAKE_PATH=$GITHUB_WORKSPACE/theos/makefiles" >> $GITHUB_ENV
-
-      - name: Download iOS SDK
-        run: |
-          mkdir -p $GITHUB_WORKSPACE/theos/sdks
-          wget -q "https://github.com/theos/sdks/archive/master.tar.gz" -O sdks.tar.gz
-          tar -xzf sdks.tar.gz --strip-components=1 -C $GITHUB_WORKSPACE/theos/sdks
-          ls $GITHUB_WORKSPACE/theos/sdks/
+        uses: Randomblock1/theos-action@main
 
       - name: Build tweak
         run: |
+          rm -f packages/*
           make package FINALPACKAGE=1
           ls packages/
 
@@ -45,5 +25,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: BaoBoiAgent-deb
-          path: packages/*.deb
+          path: ${{ github.workspace }}/packages/*.deb
           retention-days: 30
