@@ -24,7 +24,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q curl wget git make findutils ldid dpkg-dev
+          sudo apt-get install -y -q curl wget git make findutils ldid dpkg-dev clang
 
       - name: Download iOS SDK
         run: |
@@ -39,7 +39,7 @@ jobs:
           THEOS: ${{ github.workspace }}/theos
           THEOS_MAKE_PATH: ${{ github.workspace }}/theos/makefiles
         run: |
-          make package FINALPACKAGE=1 THEOS=$THEOS THEOS_MAKE_PATH=$THEOS_MAKE_PATH
+          make package FINALPACKAGE=1
           ls packages/
 
       - name: Upload .deb artifact
@@ -48,16 +48,3 @@ jobs:
           name: BaoBoiAgent-deb
           path: tweak/packages/*.deb
           retention-days: 30
-
-      - name: Upload to Bao Boi Dashboard
-        if: ${{ secrets.BAOBOI_UPLOAD_TOKEN != '' }}
-        run: |
-          DEB_FILE=$(ls tweak/packages/*.deb | head -1)
-          echo "Uploading $DEB_FILE to dashboard..."
-          curl -X POST "https://baoboidash.com/api/trpc/tweak.uploadRelease" \
-            -H "Content-Type: multipart/form-data" \
-            -H "Authorization: Bearer ${{ secrets.BAOBOI_UPLOAD_TOKEN }}" \
-            -F "file=@$DEB_FILE" \
-            -F "version=1.2.0" \
-            -F "changelog=Cap nhat URL scheme baoboi:// de kich hoat qua link" \
-            --fail-with-body || echo "Upload failed, check token"
