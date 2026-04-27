@@ -8,7 +8,7 @@ include $(THEOS)/makefiles/common.mk
 TWEAK_NAME = BaoBoiAgent
 
 BaoBoiAgent_FILES = Tweak.x
-BaoBoiAgent_CFLAGS = -fobjc-arc
+BaoBoiAgent_CFLAGS = -fobjc-arc -Wno-deprecated-declarations
 BaoBoiAgent_FRAMEWORKS = UIKit Foundation UserNotifications
 BaoBoiAgent_PRIVATE_FRAMEWORKS = AppSupport
 BaoBoiAgent_ENTITLEMENTS = entitlements.plist
