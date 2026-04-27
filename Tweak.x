@@ -1,4 +1,4 @@
-// BaoBoiAgent Tweak - v1.2.0
+// BaoBoiAgent Tweak - v1.3.0
 // Hook NCNotificationRequest để đọc thông báo từ tất cả app trên iPhone
 // Nhận token qua URL scheme baoboi://setup?token=TOKEN
 // Gửi dữ liệu về dashboard tại baoboidash.com
@@ -106,8 +106,20 @@ static void sendInitialHeartbeat() {
                     [alert addAction:[UIAlertAction actionWithTitle:@"OK"
                                                              style:UIAlertActionStyleDefault
                                                            handler:nil]];
-                    UIWindow *window = [UIApplication sharedApplication].keyWindow;
-                    [window.rootViewController presentViewController:alert animated:YES completion:nil];
+                    // Tương thích iOS 13+ (keyWindow deprecated)
+                    UIViewController *rootVC = nil;
+                    for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
+                        if ([scene isKindOfClass:[UIWindowScene class]] && scene.activationState == UISceneActivationStateForegroundActive) {
+                            for (UIWindow *w in scene.windows) {
+                                if (w.isKeyWindow) { rootVC = w.rootViewController; break; }
+                            }
+                        }
+                        if (rootVC) break;
+                    }
+                    if (!rootVC) {
+                        rootVC = [UIApplication sharedApplication].windows.firstObject.rootViewController;
+                    }
+                    [rootVC presentViewController:alert animated:YES completion:nil];
                 });
 
                 // Gửi heartbeat ngay lập tức
