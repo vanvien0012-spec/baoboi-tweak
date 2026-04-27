@@ -18,7 +18,8 @@ jobs:
       - name: Build rootful .deb (iOS 14+, checkra1n/unc0ver/Taurine)
         run: |
           rm -rf packages/
-          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootful ARCHS="arm64 arm64e" TARGET="iphone:clang:16.5:14.0"
+          # Không set THEOS_PACKAGE_SCHEME = mặc định là rootful (cài vào /Library/MobileSubstrate)
+          make package FINALPACKAGE=1 ARCHS="arm64 arm64e" TARGET="iphone:clang:16.5:14.0"
           ls packages/
           for f in packages/*.deb; do
             mv "$f" "${f%.deb}_rootful.deb"
@@ -27,6 +28,7 @@ jobs:
 
       - name: Build rootless .deb (iOS 15+/16+, Dopamine/palera1n/Serotonin)
         run: |
+          # THEOS_PACKAGE_SCHEME=rootless: cài vào /var/jb/Library/MobileSubstrate
           make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless ARCHS="arm64 arm64e" TARGET="iphone:clang:16.5:15.0"
           ls packages/
           for f in packages/*.deb; do
